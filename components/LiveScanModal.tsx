@@ -7,7 +7,7 @@ interface LiveScanModalProps {
   onClose: () => void;
 }
 
-const LiveScanModal: React.FC<LiveScanModalProps> = ({ onClose }) => {
+const LiveScanModal: React.FC<LiveScanModalProps> = ({ onClose, apiKey}) => {
   const [isConnected, setIsConnected] = useState(false);
   const [isAnalysing, setIsAnalysing] = useState(false);
   const [transcription, setTranscription] = useState<string>('');
@@ -21,14 +21,16 @@ const LiveScanModal: React.FC<LiveScanModalProps> = ({ onClose }) => {
   const activeSources = useRef<Set<AudioBufferSourceNode>>(new Set());
 
   useEffect(() => {
-    startSession();
+    if (apiKey) {
+      startSession();
+    }
     return () => stopSession();
-  }, []);
+  }, [apiKey]); // 依赖项加入 apiKey
 
   const startSession = async () => {
     try {
       // Initialize right before connection
-      const ai = new GoogleGenAI({ apiKey: process.env.API_KEY || '' });
+      const ai = new GoogleGenAI({ apiKey: apiKey});
       
       const inputCtx = new (window.AudioContext || (window as any).webkitAudioContext)({ sampleRate: 16000 });
       const outputCtx = new (window.AudioContext || (window as any).webkitAudioContext)({ sampleRate: 24000 });

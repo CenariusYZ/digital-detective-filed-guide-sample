@@ -2,9 +2,9 @@
 import { GoogleGenAI, Type } from "@google/genai";
 import { AnalysisResult, SourceLink } from "../types";
 
-export const analyzeNews = async (content: string): Promise<AnalysisResult> => {
-  // Initialize AI right before the call to ensure it uses the current environment context
-  const ai = new GoogleGenAI({ apiKey: process.env.API_KEY || '' });
+export const analyzeNews = async (content: string, apiKey: string): Promise<AnalysisResult> => {
+  // 修改：使用传入的 apiKey 初始化
+  const ai = new GoogleGenAI({ apiKey: apiKey });
 
   const response = await ai.models.generateContent({
     model: 'gemini-3-flash-preview',

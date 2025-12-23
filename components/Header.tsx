@@ -3,7 +3,11 @@ import React, { useState } from 'react';
 import { Shield, Zap, Info, X, BookOpen, AlertOctagon, Terminal } from 'lucide-react';
 import LiveScanModal from './LiveScanModal';
 
-const Header: React.FC = () => {
+interface HeaderProps {
+  apiKey: string;
+}
+
+const Header: React.FC<HeaderProps> = ({ apiKey }) => {
   const [activeConcept, setActiveConcept] = useState<string | null>(null);
   const [isLiveScanOpen, setIsLiveScanOpen] = useState(false);
 
@@ -58,7 +62,7 @@ const Header: React.FC = () => {
         </div>
       </div>
 
-      {isLiveScanOpen && <LiveScanModal onClose={() => setIsLiveScanOpen(false)} />}
+      {isLiveScanOpen && <LiveScanModal onClose={() => setIsLiveScanOpen(false)} apiKey={ apiKey }/>}
 
       {/* Concept Modal Overlay */}
       {activeConcept && (
