@@ -1,0 +1,8 @@
+
+{
+  "name": "Digital Detective Field Guide",
+  "description": "A high-fidelity web application implementing the Tri-Lens Protocol for verifying disinformation using Gemini AI and the Red Flag System.",
+  "requestFramePermissions": [
+    "microphone"
+  ]
+}
