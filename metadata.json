@@ -1,7 +1,6 @@
-
 {
-  "name": "Digital Detective Field Guide",
-  "description": "A high-fidelity web application implementing the Tri-Lens Protocol for verifying disinformation using Gemini AI and the Red Flag System.",
+  "name": "Digital Detective: Tri-Lens Intelligence Suite",
+  "description": "High-fidelity disinformation analysis terminal using the Sewage Theory and Red Flag System.",
   "requestFramePermissions": [
     "microphone"
   ]

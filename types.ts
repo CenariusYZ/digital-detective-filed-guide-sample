@@ -1,45 +1,61 @@
 
-export enum LensStatus {
-  VERIFIED = 'Verified',
-  ANONYMOUS = 'Anonymous',
-  FABRICATED = 'Fabricated',
-  SOLID = 'Solid Evidence',
-  VAGUE = 'Vague',
-  CONTRADICTORY = 'Contradictory',
-  LOGICAL = 'Logical',
-  EMOTIONAL = 'Emotional',
-  FALLACIOUS = 'Fallacious'
+export interface SourceEntity {
+  name: string;
+  status: 'Verified' | 'Anonymous' | 'Fabricated';
+  reason: string;
+  url?: string;
 }
 
-export enum VerdictLevel {
-  GREEN = 'GREEN',
-  YELLOW = 'YELLOW',
-  RED = 'RED'
+export interface AtomicClaim {
+  text: string;
+  verdict: 'verified' | 'refuted' | 'unconfirmed';
+  evidence: string;
+  trail: { title: string; url: string }[];
 }
 
-export interface Claim {
-  id: string;
+export interface LogicFallacy {
+  name: string;
+  explanation: string;
+}
+
+export interface Message {
+  role: 'user' | 'model';
   text: string;
 }
 
-export interface SourceLink {
-  uri: string;
-  title: string;
-}
-
-export interface LensEvaluation {
-  status: LensStatus;
-  label: 'Verified' | 'Anonymous' | 'Fabricated' | 'Solid Evidence' | 'Vague' | 'Contradictory' | 'Logical' | 'Emotional' | 'Fallacious';
-  details: string;
-  isRedFlag: boolean;
+export interface Suspect {
+  id: string;
+  name: string;
+  role: string;
+  description: string;
+  image: string;
+  systemPrompt: string;
 }
 
 export interface AnalysisResult {
-  claims: Claim[];
-  sourceLens: LensEvaluation;
-  factLens: LensEvaluation;
-  logicLens: LensEvaluation;
-  verdict: VerdictLevel;
   summary: string;
-  groundingSources?: SourceLink[];
+  verdict: 'AUTHENTIC' | 'FRAUDULENT' | 'SUSPICIOUS';
+  score: number;
+  groundingSources?: { title: string, uri: string }[]; // New field for real web links
+  lensA_Source: {
+    status: 'PASS' | 'BREACHED';
+    entities: SourceEntity[];
+    overallRating: string;
+  };
+  lensB_Fact: {
+    status: 'PASS' | 'BREACHED';
+    claims: AtomicClaim[];
+  };
+  lensC_Logic: {
+    status: 'PASS' | 'BREACHED';
+    fallacies: LogicFallacy[];
+    emotionalTone: string;
+    reasoningRating: string;
+  };
+}
+
+export enum AppState {
+  IDLE = 'IDLE',
+  ANALYZING = 'ANALYZING',
+  RESULT = 'RESULT'
 }

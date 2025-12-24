@@ -1,87 +1,95 @@
 
-import { GoogleGenAI, Type } from "@google/genai";
-import { AnalysisResult, SourceLink } from "../types";
+import { GoogleGenAI, Modality, Chat, GenerateContentResponse } from "@google/genai";
+import { ANALYSIS_SYSTEM_PROMPT } from "../constants";
+import { AnalysisResult, Message } from "../types";
 
-export const analyzeNews = async (content: string, apiKey: string): Promise<AnalysisResult> => {
-  // 修改：使用传入的 apiKey 初始化
-  const ai = new GoogleGenAI({ apiKey: apiKey });
+const getAI = () => new GoogleGenAI({ apiKey: process.env.API_KEY as string });
 
+/**
+ * Analyzes a narrative using the Tri-Lens Protocol.
+ * Restores Google Search Grounding to find real-world sources.
+ */
+export const analyzeNarrative = async (text: string): Promise<AnalysisResult> => {
+  const ai = getAI();
   const response = await ai.models.generateContent({
-    model: 'gemini-3-flash-preview',
-    contents: `Act as a professional disinformation analyst. Apply the 'Tri-Lens Protocol' to evaluate this news text: "${content}". 
-    
-    Instructions:
-    1. Atomization: Extract core factual claims.
-    2. Lens A (Source): Evaluate credibility. Use Google Search to verify mentioned entities.
-    3. Lens B (Fact): Evaluate verifiability against current web data.
-    4. Lens C (Logic): Evaluate reasoning and fallacies.
-    5. Red Flag System: If ANY lens has a major flaw, the verdict is RED. If there are minor warnings, YELLOW. Otherwise GREEN.
-    
-    IMPORTANT: You MUST return valid JSON.`,
+    model: "gemini-3-pro-preview",
+    contents: text,
     config: {
-      tools: [{ googleSearch: {} }],
+      systemInstruction: ANALYSIS_SYSTEM_PROMPT,
       responseMimeType: "application/json",
-      responseSchema: {
-        type: Type.OBJECT,
-        properties: {
-          claims: {
-            type: Type.ARRAY,
-            items: {
-              type: Type.OBJECT,
-              properties: {
-                id: { type: Type.STRING },
-                text: { type: Type.STRING }
-              },
-              required: ["id", "text"]
-            }
-          },
-          sourceLens: {
-            type: Type.OBJECT,
-            properties: {
-              status: { type: Type.STRING, description: "One of: Verified, Anonymous, Fabricated" },
-              details: { type: Type.STRING },
-              isRedFlag: { type: Type.BOOLEAN }
-            }
-          },
-          factLens: {
-            type: Type.OBJECT,
-            properties: {
-              status: { type: Type.STRING, description: "One of: Solid Evidence, Vague, Contradictory" },
-              details: { type: Type.STRING },
-              isRedFlag: { type: Type.BOOLEAN }
-            }
-          },
-          logicLens: {
-            type: Type.OBJECT,
-            properties: {
-              status: { type: Type.STRING, description: "One of: Logical, Emotional, Fallacious" },
-              details: { type: Type.STRING },
-              isRedFlag: { type: Type.BOOLEAN }
-            }
-          },
-          verdict: { type: Type.STRING, description: "One of: GREEN, YELLOW, RED" },
-          summary: { type: Type.STRING }
-        },
-        required: ["claims", "sourceLens", "factLens", "logicLens", "verdict", "summary"]
-      }
-    }
+      tools: [{ googleSearch: {} }],
+    },
   });
 
-  const text = response.text || '{}';
-  const result = JSON.parse(text) as AnalysisResult;
-  
-  const groundingChunks = response.candidates?.[0]?.groundingMetadata?.groundingChunks;
-  if (groundingChunks) {
-    const sources: SourceLink[] = groundingChunks
-      .map((chunk: any) => chunk.web)
-      .filter((web: any) => web && web.uri && web.title)
-      .map((web: any) => ({
-        uri: web.uri,
-        title: web.title
-      }));
+  const resultText = response.text || '{}';
+  try {
+    const json: AnalysisResult = JSON.parse(resultText);
     
-    result.groundingSources = Array.from(new Map(sources.map(s => [s.uri, s])).values());
+    // Extract real web sources from grounding metadata if available
+    const chunks = response.candidates?.[0]?.groundingMetadata?.groundingChunks;
+    if (chunks) {
+      json.groundingSources = chunks
+        .filter(c => c.web)
+        .map(c => ({
+          title: c.web!.title || 'External Intelligence Source',
+          uri: c.web!.uri
+        }));
+    }
+    
+    return json;
+  } catch (e) {
+    console.error("Failed to parse AI response:", resultText);
+    throw new Error("Invalid intelligence report format.");
   }
-
-  return result;
 };
+
+export const getSuspectResponse = async (systemInstruction: string, history: Message[], message: string): Promise<string> => {
+  const ai = getAI();
+  const chat = ai.chats.create({
+    model: 'gemini-3-flash-preview',
+    config: { systemInstruction },
+    history: history.map(m => ({
+      role: m.role,
+      parts: [{ text: m.text }]
+    }))
+  });
+  const response = await chat.sendMessage({ message });
+  return response.text || '';
+};
+
+export const decodeBase64 = (base64: string): Uint8Array => {
+  const binaryString = atob(base64);
+  const len = binaryString.length;
+  const bytes = new Uint8Array(len);
+  for (let i = 0; i < len; i++) {
+    bytes[i] = binaryString.charCodeAt(i);
+  }
+  return bytes;
+};
+
+export const encodeBase64 = (bytes: Uint8Array): string => {
+  let binary = '';
+  const len = bytes.byteLength;
+  for (let i = 0; i < len; i++) {
+    binary += String.fromCharCode(bytes[i]);
+  }
+  return btoa(binary);
+};
+
+export async function decodeAudioData(
+  data: Uint8Array,
+  ctx: AudioContext,
+  sampleRate: number,
+  numChannels: number,
+): Promise<AudioBuffer> {
+  const dataInt16 = new Int16Array(data.buffer);
+  const frameCount = dataInt16.length / numChannels;
+  const buffer = ctx.createBuffer(numChannels, frameCount, sampleRate);
+  for (let channel = 0; channel < numChannels; channel++) {
+    const channelData = buffer.getChannelData(channel);
+    for (let i = 0; i < frameCount; i++) {
+      channelData[i] = dataInt16[i * numChannels + channel] / 32768.0;
+    }
+  }
+  return buffer;
+}

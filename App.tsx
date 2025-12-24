@@ -1,200 +1,271 @@
+
 import React, { useState, useEffect } from 'react';
-import { analyzeNews } from './services/geminiService';
-import { AnalysisResult } from './types';
-import Header from './components/Header';
-import NewsInput from './components/NewsInput';
-import AnalysisDashboard from './components/AnalysisDashboard';
-import ProtocolGuide from './components/ProtocolGuide';
-// 引入新的图标 Key
-import { AlertCircle, ShieldCheck, HelpCircle, Lock, Terminal, Key } from 'lucide-react';
+import { AppState, AnalysisResult } from './types';
+import { analyzeNarrative } from './services/geminiService';
+import VerdictStamp from './components/VerdictStamp';
+import LiveScanner from './components/LiveScanner';
+
+const LensCard: React.FC<{ 
+  title: string; 
+  status: 'PASS' | 'BREACHED'; 
+  children: React.ReactNode 
+}> = ({ title, status, children }) => (
+  <div className="bg-white rounded-3xl shadow-sm border border-slate-200 overflow-hidden flex flex-col h-[750px] transition-all hover:shadow-md">
+    <div className={`px-8 py-5 flex items-center justify-between border-b ${status === 'PASS' ? 'bg-emerald-50/40' : 'bg-rose-50/40'}`}>
+      <h3 className="text-[11px] font-black uppercase tracking-[0.2em] text-slate-500">{title}</h3>
+      <div className={`flex items-center gap-2 px-3 py-1 rounded-full text-[10px] font-black uppercase ${
+        status === 'PASS' ? 'bg-emerald-600 text-white shadow-sm' : 'bg-rose-600 text-white animate-pulse shadow-sm'
+      }`}>
+        {status === 'PASS' ? 'Reliable' : 'Breached'}
+      </div>
+    </div>
+    <div className="flex-1 overflow-y-auto p-8 custom-scrollbar">
+      {children}
+    </div>
+  </div>
+);
 
 const App: React.FC = () => {
-  const [content, setContent] = useState('');
-  const [analysis, setAnalysis] = useState<AnalysisResult | null>(null);
-  const [loading, setLoading] = useState(false);
-  const [error, setError] = useState<string | null>(null);
-
-  // 新增：API Key 状态管理
-  const [apiKey, setApiKey] = useState('');
-  const [tempKey, setTempKey] = useState(''); // 输入框的临时值
-  const [showKeyInput, setShowKeyInput] = useState(true); // 控制是否显示输入界面
+  const [state, setState] = useState<AppState>(AppState.IDLE);
+  const [input, setInput] = useState('');
+  const [result, setResult] = useState<AnalysisResult | null>(null);
+  const [showLive, setShowLive] = useState(false);
+  const [loadingMessage, setLoadingMessage] = useState('Initializing Audit...');
 
   useEffect(() => {
-    // 1. 尝试从 localStorage 读取
-    const storedKey = localStorage.getItem('DIGITAL_DETECTIVE_KEY');
-    // 2. 也可以保留 .env 作为备选（方便开发）
-    const envKey = import.meta.env.VITE_API_KEY;
-
-    if (storedKey) {
-      setApiKey(storedKey);
-      setShowKeyInput(false);
-    } else if (envKey && envKey !== 'undefined' && !envKey.includes('YOUR_API_KEY')) {
-      setApiKey(envKey);
-      setShowKeyInput(false);
+    let interval: number;
+    if (state === AppState.ANALYZING) {
+      const msgs = ['Atomizing Claims...', 'Scrubbing Metadata...', 'Cross-referencing Global Data...', 'Calculating Logic Coherence...'];
+      let i = 0;
+      interval = window.setInterval(() => {
+        setLoadingMessage(msgs[i % msgs.length]);
+        i++;
+      }, 2500);
     }
-  }, []);
-
-  const handleSaveKey = () => {
-    if (tempKey.trim().length > 10) {
-      setApiKey(tempKey);
-      localStorage.setItem('DIGITAL_DETECTIVE_KEY', tempKey);
-      setShowKeyInput(false);
-    }
-  };
-
-  const handleClearKey = () => {
-    localStorage.removeItem('DIGITAL_DETECTIVE_KEY');
-    setApiKey('');
-    setTempKey('');
-    setShowKeyInput(true);
-  };
+    return () => clearInterval(interval);
+  }, [state]);
 
   const handleAnalyze = async () => {
-    if (!content.trim()) return;
-    setLoading(true);
-    setError(null);
+    if (!input.trim()) return;
+    setState(AppState.ANALYZING);
     try {
-      // 修改：将 apiKey 传递给 service
-      const result = await analyzeNews(content, apiKey);
-      setAnalysis(result);
-    } catch (err: any) {
-      // 优化错误处理：如果是 401 或 Key 错误，重新显示输入框
-      const errorMessage = err.message || 'Analysis failed.';
-      setError(errorMessage);
-      if (errorMessage.includes('API key') || errorMessage.includes('401')) {
-          setShowKeyInput(true);
-      }
-      console.error(err);
-    } finally {
-      setLoading(false);
+      const res = await analyzeNarrative(input);
+      setResult(res);
+      setState(AppState.RESULT);
+    } catch (e) {
+      console.error(e);
+      alert("Analysis failed. Protocol interrupted.");
+      setState(AppState.IDLE);
     }
   };
 
-  const reset = () => {
-    setContent('');
-    setAnalysis(null);
-    setError(null);
-  };
-
-  // 渲染：输入 Key 的全屏界面 (替代了原来的 Error Screen)
-  if (showKeyInput) {
-    return (
-      <div className="min-h-screen bg-slate-950 flex items-center justify-center p-6 text-center">
-        <div className="max-w-md w-full space-y-8 animate-in fade-in zoom-in duration-500">
-          <div className="relative mx-auto w-24 h-24 bg-indigo-500/10 rounded-full flex items-center justify-center border border-indigo-500/50">
-            <Lock className="text-indigo-500 w-10 h-10" />
-            <div className="absolute inset-0 rounded-full border border-indigo-500 animate-ping opacity-20"></div>
+  return (
+    <div className="min-h-screen bg-[#FDFDFE] text-slate-700 font-sans antialiased">
+      <header className="h-20 bg-white border-b border-slate-100 flex items-center px-10 justify-between sticky top-0 z-50">
+        <div className="flex items-center gap-4">
+          <div className="w-10 h-10 bg-slate-900 rounded-xl flex items-center justify-center text-white text-sm shadow-lg shadow-slate-200">
+            <i className="fa-solid fa-microscope"></i>
           </div>
-          <div className="space-y-4">
-            <h1 className="text-white text-2xl font-black italic tracking-tighter uppercase">Security Clearance</h1>
-            <p className="text-slate-400 text-sm leading-relaxed font-mono">
-              Identity Verification Required.<br />
-              请输入您的 Gemini API Key 以访问 Digital Detective 终端。
-            </p>
-          </div>
-          
-          <div className="bg-slate-900 p-6 rounded-2xl border border-slate-800 text-left space-y-4 shadow-2xl">
-            <div className="flex items-center gap-2 mb-1">
-              <Key className="w-4 h-4 text-indigo-500" />
-              <span className="text-[10px] text-slate-500 font-bold uppercase tracking-widest">API CREDENTIALS</span>
-            </div>
-            
-            <input 
-                type="password"
-                value={tempKey}
-                onChange={(e) => setTempKey(e.target.value)}
-                placeholder="Paste your AIza... key here"
-                className="w-full bg-black/50 border border-slate-700 rounded-lg p-3 text-white font-mono text-sm focus:ring-2 focus:ring-indigo-500 focus:border-transparent outline-none transition-all placeholder:text-slate-600"
-            />
-
-            <button 
-                onClick={handleSaveKey}
-                disabled={tempKey.length < 10}
-                className="w-full bg-indigo-600 hover:bg-indigo-700 disabled:opacity-50 disabled:cursor-not-allowed text-white font-bold py-3 rounded-lg transition-all uppercase tracking-widest text-xs flex items-center justify-center gap-2 shadow-lg shadow-indigo-900/20"
-            >
-                <Terminal className="w-4 h-4" />
-                Initialize System
-            </button>
-            
-            <p className="text-[10px] text-slate-600 text-center mt-2">
-              Key is stored locally in your browser.
-            </p>
+          <div>
+            <h1 className="font-black text-xs tracking-[0.4em] uppercase text-slate-800">Detective Engine</h1>
+            <p className="text-[10px] text-slate-400 font-bold uppercase tracking-widest mt-0.5">Disinformation Audit Suite</p>
           </div>
         </div>
-      </div>
-    );
-  }
+        <button onClick={() => setShowLive(true)} className="px-6 py-2.5 bg-slate-900 text-white rounded-xl text-[10px] font-black uppercase tracking-[0.2em] hover:bg-slate-800 transition-all shadow-xl shadow-slate-100">
+          Live Interface
+        </button>
+      </header>
 
-  return (
-    <div className="min-h-screen bg-slate-50 text-slate-900 pb-20">
-      {/* 修改：将 apiKey 传递给 Header */}
-      <Header apiKey={apiKey} />
-      
-      <main className="max-w-6xl mx-auto px-4 mt-8 grid grid-cols-1 lg:grid-cols-12 gap-8">
-        <div className="lg:col-span-5 space-y-6">
-          <section className="bg-white p-6 rounded-2xl shadow-sm border border-slate-200">
-            <div className="flex justify-between items-center mb-4">
-                <h2 className="text-xl font-bold flex items-center gap-2">
-                  <ShieldCheck className="text-indigo-600 w-5 h-5" />
-                  Feed the Evidence
-                </h2>
-                {/* 新增：重置 Key 的按钮 */}
-                <button 
-                  onClick={handleClearKey} 
-                  className="text-[10px] text-slate-400 hover:text-red-500 transition-colors font-mono underline decoration-slate-200 underline-offset-4"
-                >
-                  RESET_KEY
-                </button>
+      <main className="max-w-[1400px] mx-auto p-8 md:p-12">
+        {state !== AppState.RESULT ? (
+          <div className="max-w-2xl mx-auto mt-20 space-y-16">
+            <div className="text-center space-y-4">
+              <h2 className="text-3xl font-black tracking-tight text-slate-900 uppercase">Input Narrative Intelligence</h2>
+              <p className="text-slate-400 font-medium max-w-md mx-auto leading-relaxed">Submit the target text for exhaustive atomization and real-time truth-grounding.</p>
             </div>
-            <NewsInput 
-              value={content} 
-              onChange={setContent} 
-              onAnalyze={handleAnalyze}
-              loading={loading}
-              onReset={reset}
-            />
-            {error && (
-              <div className="mt-4 p-3 bg-red-50 text-red-700 rounded-lg flex items-start gap-2 text-sm border border-red-100">
-                <AlertCircle className="w-4 h-4 mt-0.5 shrink-0" />
-                <span>{error}</span>
+
+            <div className="bg-white rounded-[2.5rem] shadow-2xl shadow-slate-200/50 border border-slate-100 overflow-hidden">
+              <textarea
+                value={input}
+                onChange={(e) => setInput(e.target.value)}
+                placeholder="Paste the statement or article here for forensic verification..."
+                disabled={state === AppState.ANALYZING}
+                className="w-full h-80 p-12 text-lg focus:outline-none placeholder-slate-200 leading-relaxed resize-none border-none bg-transparent"
+              />
+              <div className="px-12 py-8 bg-slate-50/50 border-t border-slate-50 flex justify-between items-center">
+                <div className="flex items-center gap-3">
+                  <div className="w-2 h-2 rounded-full bg-blue-500 animate-pulse"></div>
+                  <span className="text-[10px] font-black text-slate-400 uppercase tracking-widest mono">Search Grounding: Active</span>
+                </div>
+                <button
+                  onClick={handleAnalyze}
+                  disabled={state === AppState.ANALYZING || !input.trim()}
+                  className="px-12 py-5 bg-blue-600 hover:bg-blue-700 text-white rounded-2xl font-black text-xs uppercase tracking-[0.2em] shadow-2xl shadow-blue-200 transition-all active:scale-95 flex items-center gap-4 disabled:bg-slate-200 disabled:shadow-none"
+                >
+                  {state === AppState.ANALYZING ? (
+                    <><i className="fa-solid fa-compass animate-spin"></i> {loadingMessage}</>
+                  ) : (
+                    "Deploy Protocol"
+                  )}
+                </button>
+              </div>
+            </div>
+          </div>
+        ) : result && (
+          <div className="space-y-12 animate-in fade-in slide-in-from-bottom-6 duration-700">
+            {/* Dossier Header */}
+            <div className="bg-white rounded-[3rem] p-12 shadow-sm border border-slate-100 flex flex-col md:flex-row items-center gap-16 relative overflow-hidden">
+               {/* Decorative elements */}
+               <div className="absolute top-0 right-0 w-64 h-64 bg-slate-50 rounded-full -translate-y-1/2 translate-x-1/2 opacity-50"></div>
+              
+              <div className="flex-1 space-y-8 relative z-10">
+                <div className="inline-flex items-center gap-3 px-4 py-1.5 bg-slate-50 rounded-full border border-slate-100">
+                  <span className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Case ID: {Math.random().toString(36).substr(2, 9).toUpperCase()}</span>
+                </div>
+                <h2 className="text-xl font-bold text-slate-800 leading-relaxed italic max-w-3xl">"{result.summary}"</h2>
+                
+                <div className="flex gap-16 border-t border-slate-50 pt-8">
+                  <div>
+                    <p className="text-[10px] font-black text-slate-300 uppercase tracking-widest mb-2">Confidence Level</p>
+                    <p className={`text-5xl font-black ${result.score > 70 ? 'text-emerald-500' : 'text-rose-500'}`}>{result.score}%</p>
+                  </div>
+                  <div>
+                    <p className="text-[10px] font-black text-slate-300 uppercase tracking-widest mb-2">Atomic Evidence Count</p>
+                    <p className="text-5xl font-black text-slate-900">{result.lensB_Fact.claims.length}</p>
+                  </div>
+                </div>
+              </div>
+              
+              <div className="shrink-0 flex flex-col items-center gap-6 relative z-10">
+                <VerdictStamp verdict={result.verdict} />
+                <button onClick={() => {setState(AppState.IDLE); setInput('');}} className="px-8 py-3 bg-slate-50 hover:bg-slate-100 text-slate-500 rounded-xl text-[10px] font-black uppercase tracking-[0.2em] transition-all">New Investigation</button>
+              </div>
+            </div>
+
+            {/* REAL-TIME GROUNDING LINKS */}
+            {result.groundingSources && result.groundingSources.length > 0 && (
+              <div className="bg-blue-50/50 rounded-3xl p-8 border border-blue-100/50 space-y-4">
+                <div className="flex items-center gap-3 mb-2">
+                  <i className="fa-solid fa-globe text-blue-500"></i>
+                  <h4 className="text-[10px] font-black text-blue-600 uppercase tracking-[0.2em]">Verified Intelligence Registry (Live Web)</h4>
+                </div>
+                <div className="flex flex-wrap gap-4">
+                  {result.groundingSources.map((source, idx) => (
+                    <a 
+                      key={idx} 
+                      href={source.uri} 
+                      target="_blank" 
+                      className="flex items-center gap-3 px-5 py-3 bg-white border border-blue-100 rounded-2xl hover:border-blue-400 transition-all hover:shadow-lg group"
+                    >
+                      <div className="w-8 h-8 rounded-lg bg-blue-50 flex items-center justify-center text-blue-500 group-hover:bg-blue-500 group-hover:text-white transition-all">
+                        <i className="fa-solid fa-arrow-up-right-from-square text-[10px]"></i>
+                      </div>
+                      <span className="text-xs font-bold text-slate-600 truncate max-w-xs">{source.title}</span>
+                    </a>
+                  ))}
+                </div>
               </div>
             )}
-          </section>
 
-          <section className="bg-white p-6 rounded-2xl shadow-sm border border-slate-200">
-            <h2 className="text-xl font-bold mb-4 flex items-center gap-2">
-              <HelpCircle className="text-indigo-600 w-5 h-5" />
-              The Tri-Lens Protocol
-            </h2>
-            <ProtocolGuide />
-          </section>
-        </div>
+            {/* THE TRI-LENS GRID */}
+            <div className="grid grid-cols-1 lg:grid-cols-3 gap-10">
+              
+              {/* LENS A */}
+              <LensCard title="Lens A: Source Identity" status={result.lensA_Source.status}>
+                <div className="space-y-10">
+                  <div className="p-6 bg-slate-50/50 rounded-2xl border border-slate-100">
+                    <p className="text-[10px] font-black text-slate-300 uppercase mb-3 tracking-widest">Reliability Audit</p>
+                    <p className="text-sm font-semibold text-slate-700 leading-relaxed italic">{result.lensA_Source.overallRating}</p>
+                  </div>
+                  <div className="space-y-8">
+                    {result.lensA_Source.entities.map((ent, i) => (
+                      <div key={i} className="group">
+                        <div className="flex justify-between items-center mb-3">
+                          <span className="font-black text-xs text-slate-800 uppercase tracking-wide">{ent.name}</span>
+                          <span className={`text-[9px] font-black px-3 py-1 rounded-full uppercase tracking-tighter ${
+                            ent.status === 'Verified' ? 'bg-emerald-100 text-emerald-700' : 'bg-rose-100 text-rose-700'
+                          }`}>{ent.status}</span>
+                        </div>
+                        <p className="text-xs text-slate-500 leading-relaxed font-medium">"{ent.reason}"</p>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              </LensCard>
 
-        <div className="lg:col-span-7">
-          {analysis ? (
-            <AnalysisDashboard analysis={analysis} />
-          ) : (
-            <div className="h-full min-h-[400px] flex flex-col items-center justify-center bg-white rounded-3xl border-2 border-dashed border-slate-200 text-slate-400 p-12 text-center">
-              <div className="w-20 h-20 bg-slate-50 rounded-full flex items-center justify-center mb-4">
-                <ShieldCheck className="w-10 h-10 opacity-20" />
-              </div>
-              <h3 className="text-lg font-medium text-slate-600">Awaiting Investigation</h3>
-              <p className="max-w-xs mt-2">在左侧输入新闻或主张，开启三维真相核查流程。</p>
+              {/* LENS B */}
+              <LensCard title="Lens B: Atomic Fact Check" status={result.lensB_Fact.status}>
+                <div className="space-y-10">
+                  {result.lensB_Fact.claims.map((claim, i) => (
+                    <div key={i} className="flex gap-6 group">
+                      <div className="flex flex-col items-center">
+                        <div className={`w-8 h-8 rounded-xl border-2 flex items-center justify-center text-[11px] font-black shrink-0 transition-all ${
+                          claim.verdict === 'refuted' ? 'border-rose-500 text-rose-500 bg-rose-50' : 
+                          claim.verdict === 'verified' ? 'border-emerald-500 text-emerald-500 bg-emerald-50' : 
+                          'border-slate-100 text-slate-300 bg-white'
+                        }`}>
+                          {i + 1}
+                        </div>
+                        <div className="w-px h-full bg-slate-100 mt-2 group-last:hidden"></div>
+                      </div>
+                      <div className="pb-10 space-y-4 flex-1">
+                        <h4 className="text-sm font-black text-slate-800 leading-tight group-hover:text-blue-600 transition-colors">{claim.text}</h4>
+                        <div className={`p-6 rounded-2xl border text-[11px] leading-relaxed font-medium ${
+                           claim.verdict === 'refuted' ? 'bg-rose-50/20 border-rose-100 text-rose-700' : 'bg-slate-50/30 border-slate-100 text-slate-500'
+                        }`}>
+                          {claim.evidence}
+                        </div>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </LensCard>
+
+              {/* LENS C */}
+              <LensCard title="Lens C: Logic & Emotion" status={result.lensC_Logic.status}>
+                <div className="space-y-10">
+                  <div className="grid grid-cols-2 gap-4">
+                    <div className="p-5 bg-slate-50/50 rounded-2xl border border-slate-100">
+                      <p className="text-[10px] font-black text-slate-300 uppercase mb-2 tracking-widest">Sentimental Tone</p>
+                      <p className="text-xs font-black text-slate-700">{result.lensC_Logic.emotionalTone}</p>
+                    </div>
+                    <div className="p-5 bg-slate-50/50 rounded-2xl border border-slate-100">
+                      <p className="text-[10px] font-black text-slate-300 uppercase mb-2 tracking-widest">Coherence Score</p>
+                      <p className="text-xs font-black text-slate-700">{result.lensC_Logic.reasoningRating}</p>
+                    </div>
+                  </div>
+
+                  <div className="space-y-6">
+                    <p className="text-[10px] font-black text-slate-400 uppercase tracking-[0.3em]">Logical Anomalies</p>
+                    {result.lensC_Logic.fallacies.map((f, i) => (
+                      <div key={i} className="p-6 bg-rose-50/50 border-l-4 border-rose-500 rounded-r-2xl">
+                        <p className="text-[11px] font-black text-rose-700 uppercase mb-2 tracking-wide">{f.name}</p>
+                        <p className="text-[11px] text-rose-600/80 leading-relaxed font-medium">{f.explanation}</p>
+                      </div>
+                    ))}
+                    {result.lensC_Logic.fallacies.length === 0 && (
+                      <div className="py-20 text-center border-2 border-dashed border-slate-100 rounded-[2.5rem]">
+                        <i className="fa-solid fa-check-double text-slate-200 text-3xl mb-4"></i>
+                        <p className="text-[10px] font-black text-slate-300 uppercase tracking-widest">Logic: 100% Coherent</p>
+                      </div>
+                    )}
+                  </div>
+                </div>
+              </LensCard>
+
             </div>
-          )}
-        </div>
+          </div>
+        )}
       </main>
 
-      {!analysis && !loading && content.length > 50 && (
-        <div className="fixed bottom-8 left-1/2 -translate-x-1/2 animate-bounce">
-          <button 
-            onClick={handleAnalyze}
-            className="bg-indigo-600 text-white px-8 py-3 rounded-full shadow-xl font-bold hover:bg-indigo-700 transition-all active:scale-95"
-          >
-            Run Detective Protocol
-          </button>
-        </div>
-      )}
+      {showLive && <LiveScanner onClose={() => setShowLive(false)} />}
+
+      <style>{`
+        .custom-scrollbar::-webkit-scrollbar { width: 4px; }
+        .custom-scrollbar::-webkit-scrollbar-track { background: transparent; }
+        .custom-scrollbar::-webkit-scrollbar-thumb { background: #E2E8F0; border-radius: 10px; }
+        ::selection { background: #BFDBFE; color: #1E40AF; }
+      `}</style>
     </div>
   );
 };
